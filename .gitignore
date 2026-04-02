@@ -1,0 +1,23 @@
+# Ignore all Markdown files
+*.md
+# EXCEPT for the README
+!README.md
+
+# Project specific ignores
+*.json
+*.onnx
+*.bin
+*.txt
+*.scpt
+*.sh
+output/
+error.log
+output.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
