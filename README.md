@@ -5,20 +5,28 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
 ## 🚀 Features
 - **Daily Fetching**: Pulls top posts and comments from customizable subreddits.
 - **Smart Summarization**: Uses Gemini 3 Flash (`gemini-3-flash-preview`) for fast, TTS-optimized script generation.
-- **Local TTS (Kokoro)**: Blazing fast high-quality audio synthesis (offline, free).
+- **Local TTS (Kokoro v1.0)**: Blazing fast high-quality audio synthesis (offline, free).
+- **Audio Mixing**: Intro stinger + looping background music bed, VO boost & EQ, loudness normalized to -16 LUFS for consistent playback.
 - **Apple Music Sync**: Automatically adds the morning briefing to your "Reddit AI News" playlist.
 - **Set & Forget**: Runs every morning at 6:00 AM EST via macOS `launchd`.
 
 ## 🛠️ Setup
 1. **API Keys**: Copy `.env.example` to `.env` and fill in your Reddit credentials and [Google AI Studio API Key](https://aistudio.google.com/).
-2. **Environment**:
+2. **Dependencies**:
    ```bash
+   # Python environment
    python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
+
+   # ffmpeg (required for MP3 encoding and audio mixing)
+   brew install ffmpeg
    ```
-3. **Local Models**: Run `python3 download_models.py` to pull the latest Kokoro models.
-4. **Automation (6 AM Trigger)**:
+3. **Local Models**: Download `kokoro-v1.0.onnx` and `voices.bin` into the project root. You can use `python3 download_models.py` or grab them from the [Kokoro ONNX releases](https://github.com/thewh1teagle/kokoro-onnx).
+4. **Audio Assets**: Place your intro stinger and background music bed in `audio/`:
+   - `audio/Reddit_News-stinger.mp3` — plays before the VO
+   - `audio/Reddit_News-bed.mp3` — loops under the VO for its full duration
+5. **Automation (6 AM Trigger)**:
    Run this command from the project root to set up your specific macOS LaunchAgent:
    ```bash
    cat > ~/Library/LaunchAgents/com.redditnews.daily.plist <<EOF
@@ -51,6 +59,7 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
    EOF
    launchctl load ~/Library/LaunchAgents/com.redditnews.daily.plist
    ```
+   Note: Your Mac must be awake (or asleep, not shut down) at 6 AM. If asleep, launchd runs it on wake. If powered off, the run is skipped.
 
 ## 🎙️ Customization
 - **Subreddits**: Update `REDDIT_SUBREDDITS` in `.env` (comma-separated).
@@ -59,12 +68,10 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
 - **Style**: Edit `podcast-persona.md` to change the host's tone or length.
 
 ## 📂 Structure
-- `run_daily.sh`: Main portable runner script.
-- `fetch_reddit.py`: Data gathering.
-- `summarize_news.py`: Script generation via Gemini.
-- `generate_vo.py`: Local audio synthesis.
+- `run_daily.sh`: Orchestrator — fetch → summarize → TTS → mix → Apple Music sync.
+- `fetch_reddit.py`: Pulls top posts and comments via PRAW.
+- `summarize_news.py`: Generates podcast script via Gemini (with data trimming and staleness check).
+- `generate_vo.py`: Kokoro v1.0 TTS → WAV → MP3 via ffmpeg.
+- `audio/`: Intro stinger and background music bed.
 - `add_to_music.scpt`: Apple Music integration.
-- `output/`: Dated `.mp3` and `.txt` files.
-
----
-*Built with ❤️ by Gemini CLI and an M4 Max Mac.*
+- `output/`: Dated `.mp3` (raw VO + final mix) and `.txt` files.

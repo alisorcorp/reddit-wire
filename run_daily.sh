@@ -43,7 +43,8 @@ if python3 generate_vo.py "${FILENAME}"; then
             [1:a]volume=1.4,equalizer=f=120:t=q:w=1.2:g=3[vo_boosted];
             [2:a]atrim=0:${VO_DURATION},asetpts=PTS-STARTPTS[bed_trimmed];
             [vo_boosted][bed_trimmed]amix=inputs=2:duration=first:dropout_transition=3[vo_mix];
-            [0:a][vo_mix]concat=n=2:v=0:a=1[out]
+            [0:a][vo_mix]concat=n=2:v=0:a=1[premix];
+            [premix]loudnorm=I=-16:TP=-1:LRA=11[out]
           " \
           -map "[out]" -b:a 192k "$FINAL_MP3" 2>/dev/null
         echo "Final mix saved: $FINAL_MP3"
