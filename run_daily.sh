@@ -24,12 +24,40 @@ cp podcast_script.txt "output/${FILENAME}.txt"
 
 # 3. Generate Audio (Local Kokoro)
 if python3 generate_vo.py "${FILENAME}"; then
+    echo "VO generated successfully."
+
+    # 4. Mix with stinger and music bed
+    VO_MP3="output/${FILENAME}.mp3"
+    STINGER="audio/Reddit_News-stinger.mp3"
+    BED="audio/Reddit_News-bed.mp3"
+    FINAL_MP3="output/${FILENAME} - Final.mp3"
+
+    if [ -f "$STINGER" ] && [ -f "$BED" ]; then
+        VO_DURATION=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VO_MP3")
+        echo "Mixing audio (stinger + VO with music bed)..."
+        ffmpeg -y \
+          -i "$STINGER" \
+          -i "$VO_MP3" \
+          -stream_loop -1 -i "$BED" \
+          -filter_complex "
+            [1:a]volume=1.4,equalizer=f=120:t=q:w=1.2:g=3[vo_boosted];
+            [2:a]atrim=0:${VO_DURATION},asetpts=PTS-STARTPTS[bed_trimmed];
+            [vo_boosted][bed_trimmed]amix=inputs=2:duration=first:dropout_transition=3[vo_mix];
+            [0:a][vo_mix]concat=n=2:v=0:a=1[out]
+          " \
+          -map "[out]" -b:a 192k "$FINAL_MP3" 2>/dev/null
+        echo "Final mix saved: $FINAL_MP3"
+    else
+        echo "Warning: Stinger or bed not found, skipping mix."
+        FINAL_MP3="$VO_MP3"
+    fi
+
     echo "Audio briefing generated successfully: $(date)"
-    
-    # 4. Sync to Apple Music
+
+    # 5. Sync to Apple Music
     if [ "$APPLE_MUSIC_SYNC" = "true" ]; then
-        MP3_FILENAME="${FILENAME}.mp3"
-        LOCAL_MP3="output/${MP3_FILENAME}"
+        MP3_FILENAME="$(basename "$FINAL_MP3")"
+        LOCAL_MP3="$FINAL_MP3"
         # KEY FIX: Using the 'Music' folder as the safe zone for sandboxed import
         TEMP_MP3="$HOME/Music/${MP3_FILENAME}"
         

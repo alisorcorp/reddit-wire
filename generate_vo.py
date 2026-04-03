@@ -1,6 +1,6 @@
 import os
-import wave
 import sys
+import subprocess
 import numpy as np
 import soundfile as sf
 from datetime import datetime
@@ -11,20 +11,25 @@ load_dotenv()
 
 def generate_local_audio(text, output_path, voice_name):
     print(f"Initializing Kokoro TTS engine (Voice: {voice_name})...")
-    # Initialize Kokoro with local model files
-    kokoro = Kokoro("kokoro-v0_19.onnx", "voices.bin")
-    
-    print(f"Synthesizing audio (local)...")
+    kokoro = Kokoro("kokoro-v1.0.onnx", "voices.bin")
+
+    print("Synthesizing audio (local)...")
     samples, sample_rate = kokoro.create(
-        text, 
-        voice=voice_name, 
-        speed=1.0, 
+        text,
+        voice=voice_name,
+        speed=1.0,
         lang="en-us"
     )
-    
-    # Save the synthesized audio
-    sf.write(output_path, samples, sample_rate)
-    print(f"Audio saved locally to {output_path}")
+
+    # Write WAV to a temp file, then convert to MP3 via ffmpeg
+    wav_path = output_path.rsplit(".", 1)[0] + ".wav"
+    sf.write(wav_path, samples, sample_rate)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", wav_path, "-b:a", "192k", output_path],
+        check=True, capture_output=True,
+    )
+    os.remove(wav_path)
+    print(f"Audio saved to {output_path}")
 
 if __name__ == "__main__":
     os.makedirs("output", exist_ok=True)
