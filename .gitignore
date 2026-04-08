@@ -1,18 +1,23 @@
 # Ignore all Markdown files
 *.md
-# EXCEPT for the README
 !README.md
 
-# Project specific ignores
+# Generated/local files
 *.json
 *.onnx
 *.bin
 *.txt
-*.scpt
-*.sh
+!requirements.txt
 output/
 error.log
 output.log
+.DS_Store
+
+# Core scripts are tracked (override *.scpt / *.sh)
+*.scpt
+*.sh
+!add_to_music.scpt
+!run_daily.sh
 
 # Python
 .venv/

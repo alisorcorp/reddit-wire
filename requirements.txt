@@ -1,0 +1,9 @@
+praw
+python-dotenv
+kokoro-onnx
+onnxruntime
+soundfile
+numpy
+phonemizer-fork
+espeakng-loader
+google-genai
