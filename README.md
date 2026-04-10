@@ -1,6 +1,6 @@
 # Reddit Wire
 
-Your morning briefing, delivered. Reddit Wire fetches top posts from any set of subreddits, summarizes them into a professional "Apple News Today" style podcast script, and synthesizes high-quality audio 100% locally on your Mac.
+Reddit Wire fetches top posts from any set of subreddits, summarizes them into a professional "Apple News Today" style podcast script, and synthesizes high-quality audio 100% locally on your Mac.
 
 Ships configured for AI news out of the box (`r/localLLaMA`, `r/ClaudeAI`, `r/singularity`, `r/ArtificialInteligence`), but it's just a few env vars and a persona file away from being a morning briefing for anything — finance, cooking, gaming, your local city sub, a favorite hobby, whatever you want piped into your ears at 6 AM.
 
