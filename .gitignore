@@ -17,10 +17,9 @@ output.log
 server.log
 .DS_Store
 
-# Core scripts are tracked (override *.scpt / *.sh)
+# Core scripts are tracked (override *.sh)
 *.scpt
 *.sh
-!add_to_music.scpt
 !run_daily.sh
 
 # Python

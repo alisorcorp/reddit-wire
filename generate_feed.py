@@ -155,7 +155,18 @@ def build_feed() -> int:
         filesize = mp3_path.stat().st_size
         duration = probe_duration_seconds(mp3_path)
         pub_date = format_datetime(date)
-        title = re.sub(r" - Final$", "", mp3_path.stem)
+        # Build a clean display title: "Reddit Wire - <date>".
+        # Normalizes legacy variants ("Reddit Daily", "Reddit Afternoon") to
+        # "Reddit Wire" so the show name is consistent in Podcasts, without
+        # renaming files on disk (which would change GUIDs and force
+        # re-download of every episode). Non-"Daily" variants get a
+        # parenthetical suffix to keep episodes on the same day distinct.
+        clean_stem = re.sub(r" - Final$", "", mp3_path.stem)
+        variant_match = EPISODE_RE.match(mp3_path.name)
+        variant = variant_match.group("variant") if variant_match else ""
+        title = re.sub(r"^Reddit \w+", "Reddit Wire", clean_stem)
+        if variant and variant not in ("Daily", "Wire"):
+            title = f"{title} ({variant})"
         description = episode_description(
             txt_path, f"Reddit Wire briefing for {date.strftime('%B %d, %Y')}."
         )
