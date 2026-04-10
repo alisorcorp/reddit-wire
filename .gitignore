@@ -14,6 +14,7 @@ output/
 voices/
 error.log
 output.log
+server.log
 .DS_Store
 
 # Core scripts are tracked (override *.scpt / *.sh)

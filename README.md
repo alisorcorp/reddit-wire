@@ -67,23 +67,65 @@ Ships configured for AI news out of the box (`r/localLLaMA`, `r/ClaudeAI`, `r/si
    - Your Mac must be awake (or asleep, not shut down) at 6 AM. If asleep, launchd runs it on wake. If powered off, the run is skipped.
    - **Do not place this project inside `~/Documents`, `~/Desktop`, or `~/Downloads`.** Those paths are TCC-protected on modern macOS, and `launchd`-spawned `bash` may be silently denied permission to read scripts in them (exit code `78 EX_CONFIG`), breaking the daily run. A plain `~/Code/reddit-wire` or `~/Projects/reddit-wire` works reliably.
 
+## Listening options
+
+Reddit Wire produces a standard MP3 you can play anywhere, but it also has two turnkey delivery modes so the episode ends up on your phone without you lifting a finger.
+
+### Apple Podcasts (via Tailscale Serve) — recommended
+
+This is the native-feeling option: resume-where-you-left-off, playback speed controls, CarPlay, Apple Watch, auto-download, and cross-device sync. The trick is that you need your own RSS feed hosted somewhere your iPhone can reach. [Tailscale](https://tailscale.com) solves that cleanly — no public exposure, free for personal use, HTTPS included.
+
+**One-time setup:**
+
+1. Install Tailscale on your Mac and iPhone, log into the same tailnet.
+2. In the Tailscale admin console, enable **Serve** and **HTTPS certificates** for your tailnet.
+3. Generate the RSS feed and run the local HTTP server (a tiny custom Python server with HTTP Range support, required for Podcasts scrubbing):
+   ```bash
+   # Load the HTTP server as a LaunchAgent so it survives reboots
+   cp com.redditwire.server.plist ~/Library/LaunchAgents/
+   # Edit the plist paths to match your location, then:
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.redditwire.server.plist
+   ```
+4. Expose it on your tailnet via Tailscale Serve:
+   ```bash
+   tailscale serve --bg 8080
+   ```
+   Tailscale will print your feed's HTTPS URL, e.g. `https://your-mac.tailnet-name.ts.net`.
+5. Set `PODCAST_FEED_ENABLED="true"` and `PODCAST_BASE_URL="https://your-mac.tailnet-name.ts.net"` in `.env`, plus your title/author/description/artwork overrides.
+6. Drop a square cover image at `output/artwork.jpg` (1400×1400 or larger, sRGB).
+7. Run `python3 generate_feed.py` once to write `output/feed.xml`. Then in Apple Podcasts on your Mac: **File → Follow a Show by URL** → paste `https://your-mac.tailnet-name.ts.net/feed.xml`. The subscription syncs to your iPhone automatically via iCloud; iOS picks up the feed via Tailscale.
+
+From then on, `run_daily.sh` regenerates the feed after each episode, and Podcasts discovers the new episode on its next refresh.
+
+**Caveats:**
+- Your Mac must be awake when Podcasts refreshes on any device (iPhone / iPad / Watch). If the Mac is asleep with the lid closed, enable *Wake for network access* in System Settings → Battery → Options, or keep it plugged in with the lid open.
+- The HTTP server binds to `127.0.0.1` only — Tailscale proxies from your tailnet to it, so nothing is exposed on your LAN or the public internet.
+- `tailscale serve` config persists across reboots (stored in tailscaled state), so you only run it once.
+
+### Apple Music (via AppleScript)
+
+The original delivery path. `run_daily.sh` copies the final MP3 into `~/Music/` and an AppleScript (`add_to_music.scpt`) tells Music.app to import it into a named playlist. Less native than Podcasts for this use case, and the AppleEvent integration is fiddly under `launchd`, but it works without any tailnet setup.
+
+Set `APPLE_MUSIC_SYNC="true"` and `APPLE_MUSIC_PLAYLIST="Your Playlist Name"` in `.env`. You can run both delivery modes in parallel if you want.
+
 ## Customization
 - **Subreddits**: Update `REDDIT_SUBREDDITS` in `.env` (comma-separated). This is the main knob for repurposing — point it at any communities you care about (`cooking,recipes,mealprep` for a food briefing; `personalfinance,investing,stocks` for a market rundown; `r/yourcity` for neighborhood news, and so on).
 - **Persona & style**: Edit `podcast-persona.md` to rewrite the host's tone, length, and pronunciation rules. The default persona is tuned for AI news — rewrite it to match whatever topic you're briefing on.
 - **Prompt overrides**: `summarize_news.py` also contains topic-specific pronunciation rules in its Gemini prompt (RAM, CUDA, localLLaMA, Claude Co-work, etc.). Remove or replace these for non-AI topics.
 - **Voice**: Update `KOKORO_VOICE` in `.env`.
-- **Music Sync**: Toggle `APPLE_MUSIC_SYNC` in `.env` (`true` or `false`).
-- **Playlist Name**: Set `APPLE_MUSIC_PLAYLIST` in `.env` (default: `Reddit Wire`). The playlist is created automatically on first run if it doesn't exist.
+- **Podcast feed metadata**: `PODCAST_TITLE`, `PODCAST_DESCRIPTION`, `PODCAST_AUTHOR`, `PODCAST_LANGUAGE`, `PODCAST_CATEGORY`, and `PODCAST_ARTWORK_URL` in `.env` control how your show appears in Apple Podcasts.
 
 ## Structure
-- `run_daily.sh`: Orchestrator — fetch → summarize → TTS → mix → Apple Music sync.
+- `run_daily.sh`: Orchestrator — fetch → summarize → TTS → mix → Apple Music sync → feed regen.
 - `fetch_reddit.py`: Pulls top posts and comments via PRAW.
 - `summarize_news.py`: Generates podcast script via Gemini (with data trimming and staleness check).
 - `generate_vo.py`: Kokoro v1.0 TTS → WAV → MP3 via ffmpeg.
+- `generate_feed.py`: Scans `output/` and emits an iTunes-compatible RSS 2.0 feed (`feed.xml`) for Apple Podcasts.
+- `serve.py`: Tiny HTTP file server with Range request support (required by Podcasts). Runs as a LaunchAgent on `127.0.0.1:8080` and is proxied by Tailscale Serve.
 - `podcast-persona.md`: Prompt persona defining the host's tone, style, and pronunciation rules.
 - `audio/`: Intro stinger and background music bed.
 - `add_to_music.scpt`: Apple Music integration.
-- `output/`: Dated `.mp3` (raw VO + final mix) and `.txt` files.
+- `output/`: Dated `.mp3` (raw VO + final mix), `.txt` scripts, `feed.xml`, and `artwork.jpg`.
 
 ## License
 [MIT](LICENSE)

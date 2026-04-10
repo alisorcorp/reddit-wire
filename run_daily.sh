@@ -114,6 +114,16 @@ if run_with_timeout 900 python3 generate_vo.py "${FILENAME}"; then
     else
         echo "Apple Music Sync is disabled in .env."
     fi
+
+    # 6. Generate podcast RSS feed (for Apple Podcasts via Tailscale Serve)
+    if [ "${PODCAST_FEED_ENABLED:-false}" = "true" ]; then
+        echo "Regenerating podcast feed..."
+        if run_with_timeout 60 python3 generate_feed.py; then
+            echo "Feed updated."
+        else
+            echo "Error: generate_feed.py failed or timed out." >&2
+        fi
+    fi
 else
     echo "[$(date '+%F %T')] Local Kokoro failed, using macOS 'say' as fallback (capped at 5m)..."
     run_with_timeout 300 say -f podcast_script.txt -o "output/${FILENAME}.aiff" \
