@@ -81,6 +81,12 @@ def summarize():
     - DO NOT include both the original spelling and the pronunciation. Choose one.
     - Use TODAY'S DATE ({today_str}) in your opening line. Do not use the example date from the persona.
     - Write "AI" naturally. Do not spell it out or use phonetic alternatives.
+    - Always write "localLLaMA" as "Local-Lama".
+    - For any model name containing a decimal, spell the decimal as "point" (e.g., "3.5" becomes "three-point-five", "4.1" becomes "four-point-one", "2.0" becomes "two-point-oh").
+    - ALWAYS use contractions in place of formal phrasing (e.g., "it's" not "it is", "don't" not "do not", "we're" not "we are", "that's" not "that is"). The script should sound natural and spoken.
+    - Always write "RAM" as "ram" (lowercase, pronounced as a word, not spelled out).
+    - Always write "CUDA" as "cooda" (phonetic spelling for TTS).
+    - Always write "Claude Cowork" as "Claude Co-work" (hyphenated, so TTS pronounces it "co-work", not "cow-ork").
 
     START IMMEDIATELY with the host's first line.
     NO 'I will read...' statements.

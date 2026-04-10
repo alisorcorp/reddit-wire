@@ -1,6 +1,8 @@
-# Ignore all Markdown files
+# Ignore all Markdown files (CLAUDE.md, GEMINI.md, scratch notes, etc.)
+# Exceptions: README and the prompt persona, which ship with the repo.
 *.md
 !README.md
+!podcast-persona.md
 
 # Generated/local files
 *.json

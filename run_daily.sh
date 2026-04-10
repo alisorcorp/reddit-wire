@@ -85,15 +85,25 @@ if run_with_timeout 900 python3 generate_vo.py "${FILENAME}"; then
         MP3_FILENAME="$(basename "$FINAL_MP3")"
         LOCAL_MP3="$FINAL_MP3"
         TEMP_MP3="$HOME/Music/${MP3_FILENAME}"
-        
+        PLAYLIST_NAME="${APPLE_MUSIC_PLAYLIST:-Reddit AI News}"
+
+        # Pre-warm Music in the background so it has time to fully initialize
+        # before osascript starts poking it. Reduces AppleEvent -1712 timeouts
+        # seen under launchd when Music was cold-starting from scratch.
+        # -g keeps it backgrounded so we don't steal focus on a 6 AM run.
+        open -g -a Music 2>/dev/null || true
+
         if ! cp "$LOCAL_MP3" "$TEMP_MP3"; then
             echo "Error: Failed to copy $LOCAL_MP3 to $TEMP_MP3" >&2
             echo "Error: Could not sync to Apple Music. Check 'error.log'."
         else
-            echo "Syncing $TEMP_MP3 to Apple Music..."
+            echo "Syncing $TEMP_MP3 to Apple Music (playlist: ${PLAYLIST_NAME})..."
 
-            if osascript add_to_music.scpt "$TEMP_MP3"; then
-                echo "Successfully added to 'Reddit AI News' playlist."
+            # Extra settle time after the bg launch before the first AppleEvent.
+            sleep 3
+
+            if run_with_timeout 240 osascript add_to_music.scpt "$TEMP_MP3" "$PLAYLIST_NAME"; then
+                echo "Successfully added to '${PLAYLIST_NAME}' playlist."
             else
                 echo "Error: Could not sync to Apple Music. Check 'error.log'."
             fi

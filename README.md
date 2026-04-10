@@ -2,12 +2,14 @@
 
 An automated morning briefing that fetches top AI news from Reddit, summarizes it into a professional "Apple News Today" style podcast script, and synthesizes high-quality audio 100% locally on your Mac.
 
+**Requirements:** macOS 13+, Python 3.13, `ffmpeg` (via Homebrew). This project is macOS-only — it depends on `launchd`, `osascript`, Apple Music, and the `say` fallback.
+
 ## 🚀 Features
 - **Daily Fetching**: Pulls top posts and comments from customizable subreddits.
 - **Smart Summarization**: Uses Gemini 3 Flash (`gemini-3-flash-preview`) for fast, TTS-optimized script generation.
 - **Local TTS (Kokoro v1.0)**: Blazing fast high-quality audio synthesis (offline, free).
 - **Audio Mixing**: Intro stinger + looping background music bed, VO boost & EQ, loudness normalized to -16 LUFS for consistent playback.
-- **Apple Music Sync**: Automatically adds the morning briefing to your "Reddit AI News" playlist.
+- **Apple Music Sync**: Automatically adds the morning briefing to a playlist of your choice (created automatically if it doesn't exist).
 - **Set & Forget**: Runs every morning at 6:00 AM EST via macOS `launchd`.
 
 ## 🛠️ Setup
@@ -59,12 +61,15 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
    EOF
    launchctl load ~/Library/LaunchAgents/com.redditnews.daily.plist
    ```
-   Note: Your Mac must be awake (or asleep, not shut down) at 6 AM. If asleep, launchd runs it on wake. If powered off, the run is skipped.
+   Notes:
+   - Your Mac must be awake (or asleep, not shut down) at 6 AM. If asleep, launchd runs it on wake. If powered off, the run is skipped.
+   - **Do not place this project inside `~/Documents`, `~/Desktop`, or `~/Downloads`.** Those paths are TCC-protected on modern macOS, and `launchd`-spawned `bash` may be silently denied permission to read scripts in them (exit code `78 EX_CONFIG`), breaking the daily run. A plain `~/Code/reddit-news` or `~/Projects/reddit-news` works reliably.
 
 ## 🎙️ Customization
 - **Subreddits**: Update `REDDIT_SUBREDDITS` in `.env` (comma-separated).
 - **Voice**: Update `KOKORO_VOICE` in `.env`.
 - **Music Sync**: Toggle `APPLE_MUSIC_SYNC` in `.env` (`true` or `false`).
+- **Playlist Name**: Set `APPLE_MUSIC_PLAYLIST` in `.env` (default: `Reddit AI News`). The playlist is created automatically on first run if it doesn't exist.
 - **Style**: Edit `podcast-persona.md` to change the host's tone or length.
 
 ## 📂 Structure
@@ -72,6 +77,10 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
 - `fetch_reddit.py`: Pulls top posts and comments via PRAW.
 - `summarize_news.py`: Generates podcast script via Gemini (with data trimming and staleness check).
 - `generate_vo.py`: Kokoro v1.0 TTS → WAV → MP3 via ffmpeg.
+- `podcast-persona.md`: Prompt persona defining the host's tone, style, and pronunciation rules.
 - `audio/`: Intro stinger and background music bed.
 - `add_to_music.scpt`: Apple Music integration.
 - `output/`: Dated `.mp3` (raw VO + final mix) and `.txt` files.
+
+## 📄 License
+[MIT](LICENSE)
