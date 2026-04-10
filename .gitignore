@@ -11,6 +11,7 @@
 *.txt
 !requirements.txt
 output/
+voices/
 error.log
 output.log
 .DS_Store

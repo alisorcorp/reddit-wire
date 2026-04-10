@@ -3,7 +3,7 @@ on run argv
 	if (count of argv) ≥ 2 and (item 2 of argv) is not "" then
 		set playlistName to (item 2 of argv)
 	else
-		set playlistName to "Reddit AI News"
+		set playlistName to "Reddit Wire"
 	end if
 
 	-- Launch Music and poll until it responds (critical for launchd/headless runs)

@@ -85,7 +85,7 @@ if run_with_timeout 900 python3 generate_vo.py "${FILENAME}"; then
         MP3_FILENAME="$(basename "$FINAL_MP3")"
         LOCAL_MP3="$FINAL_MP3"
         TEMP_MP3="$HOME/Music/${MP3_FILENAME}"
-        PLAYLIST_NAME="${APPLE_MUSIC_PLAYLIST:-Reddit AI News}"
+        PLAYLIST_NAME="${APPLE_MUSIC_PLAYLIST:-Reddit Wire}"
 
         # Pre-warm Music in the background so it has time to fully initialize
         # before osascript starts poking it. Reduces AppleEvent -1712 timeouts

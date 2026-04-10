@@ -1,6 +1,6 @@
-# Reddit AI News Pipeline 🎙️
+# Reddit Wire 🎙️
 
-An automated morning briefing that fetches top AI news from Reddit, summarizes it into a professional "Apple News Today" style podcast script, and synthesizes high-quality audio 100% locally on your Mac.
+Your morning AI briefing, delivered. Reddit Wire fetches top AI news from Reddit, summarizes it into a professional "Apple News Today" style podcast script, and synthesizes high-quality audio 100% locally on your Mac.
 
 **Requirements:** macOS 13+, Python 3.13, `ffmpeg` (via Homebrew). This project is macOS-only — it depends on `launchd`, `osascript`, Apple Music, and the `say` fallback.
 
@@ -31,13 +31,13 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
 5. **Automation (6 AM Trigger)**:
    Run this command from the project root to set up your specific macOS LaunchAgent:
    ```bash
-   cat > ~/Library/LaunchAgents/com.redditnews.daily.plist <<EOF
+   cat > ~/Library/LaunchAgents/com.redditwire.daily.plist <<EOF
    <?xml version="1.0" encoding="UTF-8"?>
    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
    <plist version="1.0">
    <dict>
        <key>Label</key>
-       <string>com.redditnews.daily</string>
+       <string>com.redditwire.daily</string>
        <key>ProgramArguments</key>
        <array>
            <string>/bin/bash</string>
@@ -59,17 +59,17 @@ An automated morning briefing that fetches top AI news from Reddit, summarizes i
    </dict>
    </plist>
    EOF
-   launchctl load ~/Library/LaunchAgents/com.redditnews.daily.plist
+   launchctl load ~/Library/LaunchAgents/com.redditwire.daily.plist
    ```
    Notes:
    - Your Mac must be awake (or asleep, not shut down) at 6 AM. If asleep, launchd runs it on wake. If powered off, the run is skipped.
-   - **Do not place this project inside `~/Documents`, `~/Desktop`, or `~/Downloads`.** Those paths are TCC-protected on modern macOS, and `launchd`-spawned `bash` may be silently denied permission to read scripts in them (exit code `78 EX_CONFIG`), breaking the daily run. A plain `~/Code/reddit-news` or `~/Projects/reddit-news` works reliably.
+   - **Do not place this project inside `~/Documents`, `~/Desktop`, or `~/Downloads`.** Those paths are TCC-protected on modern macOS, and `launchd`-spawned `bash` may be silently denied permission to read scripts in them (exit code `78 EX_CONFIG`), breaking the daily run. A plain `~/Code/reddit-wire` or `~/Projects/reddit-wire` works reliably.
 
 ## 🎙️ Customization
 - **Subreddits**: Update `REDDIT_SUBREDDITS` in `.env` (comma-separated).
 - **Voice**: Update `KOKORO_VOICE` in `.env`.
 - **Music Sync**: Toggle `APPLE_MUSIC_SYNC` in `.env` (`true` or `false`).
-- **Playlist Name**: Set `APPLE_MUSIC_PLAYLIST` in `.env` (default: `Reddit AI News`). The playlist is created automatically on first run if it doesn't exist.
+- **Playlist Name**: Set `APPLE_MUSIC_PLAYLIST` in `.env` (default: `Reddit Wire`). The playlist is created automatically on first run if it doesn't exist.
 - **Style**: Edit `podcast-persona.md` to change the host's tone or length.
 
 ## 📂 Structure
