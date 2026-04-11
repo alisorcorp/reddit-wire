@@ -90,8 +90,8 @@ def format_duration(seconds: int) -> str:
     return f"{h}:{m:02d}:{s:02d}"
 
 
-def find_episodes() -> list[tuple[datetime, Path, Path | None]]:
-    """Return [(pub_date, mp3_path, txt_path|None), ...] newest first.
+def find_episodes() -> list[tuple[datetime, Path, Path | None, Path | None]]:
+    """Return [(pub_date, mp3_path, txt_path|None, description_path|None), ...] newest first.
 
     When both "- Final.mp3" and the plain fallback exist for a given
     (date, variant), the Final mix wins. Multiple variants per date
@@ -113,7 +113,7 @@ def find_episodes() -> list[tuple[datetime, Path, Path | None]]:
         if existing is None or (is_final and not existing[1]):
             by_key[key] = (p, is_final)
 
-    episodes: list[tuple[datetime, Path, Path | None]] = []
+    episodes: list[tuple[datetime, Path, Path | None, Path | None]] = []
     # Sort: date desc, then variant (so Daily precedes Afternoon on same day)
     for (date, _variant), (mp3_path, _) in sorted(
         by_key.items(), key=lambda kv: (kv[0][0], kv[0][1]), reverse=True
@@ -121,12 +121,32 @@ def find_episodes() -> list[tuple[datetime, Path, Path | None]]:
         # Script file has no " - Final" suffix
         base = re.sub(r" - Final$", "", mp3_path.stem)
         txt_path = OUTPUT_DIR / f"{base}.txt"
-        episodes.append((date, mp3_path, txt_path if txt_path.exists() else None))
+        desc_path = OUTPUT_DIR / f"{base}.description.txt"
+        episodes.append(
+            (
+                date,
+                mp3_path,
+                txt_path if txt_path.exists() else None,
+                desc_path if desc_path.exists() else None,
+            )
+        )
     return episodes
 
 
-def episode_description(txt_path: Path | None, fallback: str) -> str:
-    """Return first ~600 chars of the script, or a fallback."""
+def episode_description(
+    description_path: Path | None,
+    txt_path: Path | None,
+    fallback: str,
+) -> str:
+    """Prefer a Gemini-written description file; fall back to a truncated script intro."""
+    if description_path is not None:
+        try:
+            text = description_path.read_text(encoding="utf-8", errors="replace").strip()
+            if text:
+                return text
+        except OSError:
+            pass
+
     if txt_path is None:
         return fallback
     try:
@@ -151,7 +171,7 @@ def build_feed() -> int:
 
     now = format_datetime(datetime.now(timezone.utc))
     items: list[str] = []
-    for date, mp3_path, txt_path in episodes:
+    for date, mp3_path, txt_path, desc_path in episodes:
         filesize = mp3_path.stat().st_size
         duration = probe_duration_seconds(mp3_path)
         pub_date = format_datetime(date)
@@ -168,7 +188,9 @@ def build_feed() -> int:
         if variant and variant not in ("Daily", "Wire"):
             title = f"{title} ({variant})"
         description = episode_description(
-            txt_path, f"Reddit Wire briefing for {date.strftime('%B %d, %Y')}."
+            desc_path,
+            txt_path,
+            f"Reddit Wire briefing for {date.strftime('%B %d, %Y')}.",
         )
         enclosure_url = f"{BASE_URL}/{quote(mp3_path.name)}"
         items.append(

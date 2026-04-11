@@ -71,10 +71,17 @@ def summarize():
     TODAY'S DATE: {today_str}
 
     Read the following Reddit data and podcast persona.
-    Write a conversational 1200-1500 word podcast script in the style of Apple News Today.
-    Output ONLY raw script text.
+    Write a conversational 1200-1500 word podcast script in the style of Apple News Today,
+    followed by a short episode description for the podcast app.
 
-    IMPORTANT:
+    OUTPUT FORMAT (exactly):
+    1. The podcast script (1200-1500 words, TTS-optimized per rules below).
+    2. On its own line, exactly this marker: ~~~EPISODE_DESCRIPTION~~~
+    3. A 2-3 sentence episode description (plain prose, max ~400 characters) highlighting
+       the top stories covered. The description is plain text for a podcast app UI — it is
+       NOT read by TTS, so it does not need phonetic spellings or contractions.
+
+    SCRIPT RULES (apply to part 1 only):
     - This script is for a Text-to-Speech (TTS) engine. It will read EVERYTHING literally.
     - NEVER put pronunciation guides in parentheses (e.g., NO "LLM (L-L-M)").
     - If a term or username is hard to pronounce, use ONLY the phonetic version that sounds natural when spoken.
@@ -88,7 +95,13 @@ def summarize():
     - Always write "CUDA" as "cooda" (phonetic spelling for TTS).
     - Always write "Claude Cowork" as "Claude Co-work" (hyphenated, so TTS pronounces it "co-work", not "cow-ork").
 
-    START IMMEDIATELY with the host's first line.
+    DESCRIPTION RULES (apply to part 3 only):
+    - Normal written English. Proper capitalization of model names, terms, and companies.
+    - No phonetic spellings, no "point" for decimals, no special TTS formatting.
+    - Focus on the top 1-2 stories. Don't quote the script verbatim.
+    - Keep it under ~400 characters.
+
+    START IMMEDIATELY with the host's first line of the script.
     NO 'I will read...' statements.
 
     PERSONA:
@@ -104,19 +117,33 @@ def summarize():
             model=model_name,
             contents=prompt
         )
-        script_text = response.text
+        raw_text = response.text
 
-        lines = script_text.split('\n')
+        # Split script and description on the marker
+        marker = "~~~EPISODE_DESCRIPTION~~~"
+        if marker in raw_text:
+            script_part, description_part = raw_text.split(marker, 1)
+        else:
+            print("Warning: description marker not found in response. Falling back to script-only.")
+            script_part = raw_text
+            description_part = ""
+
+        lines = script_part.split('\n')
         cleaned_lines = [
             line for line in lines
             if not any(line.strip().startswith(p) for p in ["I will read", "I'll read", "Reading"])
         ]
         final_script = '\n'.join(cleaned_lines).strip()
+        final_description = description_part.strip()
 
         with open('podcast_script.txt', 'w') as f:
             f.write(final_script)
-
         print("Successfully generated podcast_script.txt")
+
+        if final_description:
+            with open('podcast_description.txt', 'w') as f:
+                f.write(final_description)
+            print("Successfully generated podcast_description.txt")
     except Exception as e:
         print(f"Error during generation: {e}")
 
