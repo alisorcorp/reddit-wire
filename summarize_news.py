@@ -76,7 +76,25 @@ def summarize():
             suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
         return d.strftime(f"%A, %B {day}{suffix}, %Y")
 
+    def get_time_of_day():
+        """Return (hour_24, label) for the current local time.
+
+        Labels are used to steer the intro greeting — Gemini picks the
+        specific wording ('Good morning', 'Good evening', etc.) based on
+        the label, so manual runs at off-hours don't open with a stale
+        'Good morning' at 10pm.
+        """
+        hour = datetime.now().hour
+        if 5 <= hour < 12:
+            return hour, "morning"
+        if 12 <= hour < 17:
+            return hour, "afternoon"
+        if 17 <= hour < 21:
+            return hour, "evening"
+        return hour, "late night"
+
     today_str = get_date_with_ordinal()
+    current_hour, time_of_day = get_time_of_day()
 
     if not api_key:
         print("Error: GOOGLE_API_KEY not found in .env. Get one at https://aistudio.google.com/")
@@ -112,6 +130,7 @@ def summarize():
 
     prompt = f"""
     TODAY'S DATE: {today_str}
+    CURRENT LOCAL TIME: {current_hour:02d}:00 ({time_of_day})
 
     Read the following Reddit data and podcast persona.
     Write a conversational 1200-1500 word podcast script in the style of Apple News Today,
@@ -135,6 +154,7 @@ def summarize():
     - If a term or username is hard to pronounce, use ONLY the phonetic version that sounds natural when spoken.
     - DO NOT include both the original spelling and the pronunciation. Choose one.
     - Use TODAY'S DATE ({today_str}) in your opening line. Do not use the example date from the persona.
+    - Open with a warm, natural greeting that matches the CURRENT LOCAL TIME ({time_of_day}). Do NOT default to a morning greeting if it is not morning — pick wording that genuinely fits the current time of day. If it is late night, acknowledge the unusual hour with a greeting that sounds right for that time, not a recycled morning template.
     - Write "AI" naturally. Do not spell it out or use phonetic alternatives.
     - Always write "localLLaMA" as "Local-Lama".
     - For any model name containing a decimal, spell the decimal as "point" (e.g., "3.5" becomes "three-point-five", "4.1" becomes "four-point-one", "2.0" becomes "two-point-oh").
