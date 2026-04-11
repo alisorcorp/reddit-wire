@@ -162,6 +162,7 @@ def summarize():
     - Always write "RAM" as "ram" (lowercase, pronounced as a word, not spelled out).
     - Always write "CUDA" as "cooda" (phonetic spelling for TTS).
     - Always write "Claude Cowork" as "Claude Co-work" (hyphenated, so TTS pronounces it "co-work", not "cow-ork").
+    - NEVER write "AM", "PM", "a.m.", or "p.m." anywhere in the script. The TTS engine reads them letter-by-letter with pauses ("P. M.") which sounds robotic. Use natural spoken phrasing instead: "in the morning", "in the afternoon", "in the evening", "at night", "tonight", "this morning", "o'clock at night", etc. For example, ten at night should be written as "ten o'clock at night" or "ten in the evening", not "10 PM".
 
     DESCRIPTION RULES (apply to part 3 only):
     - Normal written English. Proper capitalization of model names, terms, and companies.
