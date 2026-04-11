@@ -48,8 +48,21 @@ LANGUAGE = os.getenv("PODCAST_LANGUAGE", "en-us")
 CATEGORY = os.getenv("PODCAST_CATEGORY", "Technology")
 
 EPISODE_RE = re.compile(
-    r"^Reddit (?P<variant>\w+) - (?P<date>[A-Za-z]+ \d{1,2}, \d{4})(?P<final> - Final)?\.mp3$"
+    r"^Reddit (?P<prefix>\w+)"
+    r"(?: - (?P<tod>Afternoon|Evening|Late Night))?"
+    r" - (?P<date>[A-Za-z]+ \d{1,2}, \d{4})"
+    r"(?P<final> - Final)?\.mp3$"
 )
+
+# Chronological order within a single day. Morning episodes (the default
+# 6 AM cron) dedupe under "Daily" so both new "Reddit Wire - <date>" and
+# legacy "Reddit Daily - <date>" files live in the same slot.
+TOD_ORDER = {
+    "Daily": 0,       # morning default, 5-11
+    "Afternoon": 1,   # 12-16
+    "Evening": 2,     # 17-20
+    "Late Night": 3,  # 21-4
+}
 
 
 def parse_episode_date(date_str: str) -> datetime:
@@ -90,12 +103,28 @@ def format_duration(seconds: int) -> str:
     return f"{h}:{m:02d}:{s:02d}"
 
 
+def episode_variant(prefix: str, tod: str | None) -> str:
+    """Map a parsed (prefix, tod) pair to a canonical dedup/sort variant.
+
+    - New format "Reddit Wire - <date>" → prefix="Wire", tod=None → "Daily"
+    - New format "Reddit Wire - Afternoon - <date>" → prefix="Wire", tod="Afternoon" → "Afternoon"
+    - Legacy "Reddit Daily - <date>" → prefix="Daily", tod=None → "Daily"
+    - Legacy "Reddit Afternoon - <date>" → prefix="Afternoon", tod=None → "Afternoon"
+    """
+    if tod:
+        return tod
+    if prefix in ("Wire", "Daily"):
+        return "Daily"
+    return prefix  # legacy non-morning variant
+
+
 def find_episodes() -> list[tuple[datetime, Path, Path | None, Path | None]]:
     """Return [(pub_date, mp3_path, txt_path|None, description_path|None), ...] newest first.
 
     When both "- Final.mp3" and the plain fallback exist for a given
     (date, variant), the Final mix wins. Multiple variants per date
-    (e.g. a Daily and an Afternoon) coexist as separate episodes.
+    (morning + afternoon + evening + late night) coexist as separate
+    episodes and are ordered chronologically within the day (latest first).
     """
     by_key: dict[tuple[datetime, str], tuple[Path, bool]] = {}
     for p in OUTPUT_DIR.glob("Reddit *.mp3"):
@@ -106,17 +135,22 @@ def find_episodes() -> list[tuple[datetime, Path, Path | None, Path | None]]:
             date = parse_episode_date(m.group("date"))
         except ValueError:
             continue
-        variant = m.group("variant")
+        variant = episode_variant(m.group("prefix"), m.group("tod"))
         is_final = m.group("final") is not None
         key = (date, variant)
         existing = by_key.get(key)
         if existing is None or (is_final and not existing[1]):
             by_key[key] = (p, is_final)
 
+    # Sort: date desc, then chronological-within-day desc (Late Night first,
+    # Morning last) so the feed reads newest-first end-to-end.
+    def sort_key(item: tuple[tuple[datetime, str], tuple[Path, bool]]):
+        (date, variant), _ = item
+        return (date, TOD_ORDER.get(variant, 0))
+
     episodes: list[tuple[datetime, Path, Path | None, Path | None]] = []
-    # Sort: date desc, then variant (so Daily precedes Afternoon on same day)
     for (date, _variant), (mp3_path, _) in sorted(
-        by_key.items(), key=lambda kv: (kv[0][0], kv[0][1]), reverse=True
+        by_key.items(), key=sort_key, reverse=True
     ):
         # Script file has no " - Final" suffix
         base = re.sub(r" - Final$", "", mp3_path.stem)
@@ -175,17 +209,17 @@ def build_feed() -> int:
         filesize = mp3_path.stat().st_size
         duration = probe_duration_seconds(mp3_path)
         pub_date = format_datetime(date)
-        # Build a clean display title: "Reddit Wire - <date>".
-        # Normalizes legacy variants ("Reddit Daily", "Reddit Afternoon") to
-        # "Reddit Wire" so the show name is consistent in Podcasts, without
-        # renaming files on disk (which would change GUIDs and force
-        # re-download of every episode). Non-"Daily" variants get a
-        # parenthetical suffix to keep episodes on the same day distinct.
-        clean_stem = re.sub(r" - Final$", "", mp3_path.stem)
-        variant_match = EPISODE_RE.match(mp3_path.name)
-        variant = variant_match.group("variant") if variant_match else ""
-        title = re.sub(r"^Reddit \w+", "Reddit Wire", clean_stem)
-        if variant and variant not in ("Daily", "Wire"):
+        # Build a clean display title: "Reddit Wire - <date>" for morning
+        # episodes, "Reddit Wire - <date> (Afternoon|Evening|Late Night)" for
+        # others. Normalizes legacy "Reddit Daily" / "Reddit Afternoon" files
+        # to the same format without renaming them on disk (which would
+        # change GUIDs and force re-download).
+        m = EPISODE_RE.match(mp3_path.name)
+        variant = (
+            episode_variant(m.group("prefix"), m.group("tod")) if m else "Daily"
+        )
+        title = f"Reddit Wire - {date.strftime('%B %d, %Y')}"
+        if variant != "Daily":
             title = f"{title} ({variant})"
         description = episode_description(
             desc_path,

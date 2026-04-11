@@ -39,7 +39,21 @@ run_with_timeout 180 python3 summarize_news.py
 
 # Date format: "March 31, 2026"
 DATE_STR=$(date "+%B %d, %Y")
-FILENAME="Reddit Wire - ${DATE_STR}"
+
+# Time-of-day suffix so manual runs (or additional cron entries) don't
+# collide with the default 6 AM morning episode. Morning stays unadorned
+# for backward compatibility with the existing episode archive.
+HOUR_NUM=$((10#$(date "+%H")))
+if [ $HOUR_NUM -ge 12 ] && [ $HOUR_NUM -lt 17 ]; then
+    TOD_SUFFIX=" - Afternoon"
+elif [ $HOUR_NUM -ge 17 ] && [ $HOUR_NUM -lt 21 ]; then
+    TOD_SUFFIX=" - Evening"
+elif [ $HOUR_NUM -ge 21 ] || [ $HOUR_NUM -lt 5 ]; then
+    TOD_SUFFIX=" - Late Night"
+else
+    TOD_SUFFIX=""  # 5-11, morning default
+fi
+FILENAME="Reddit Wire${TOD_SUFFIX} - ${DATE_STR}"
 cp podcast_script.txt "output/${FILENAME}.txt"
 if [ -f podcast_description.txt ]; then
     cp podcast_description.txt "output/${FILENAME}.description.txt"
