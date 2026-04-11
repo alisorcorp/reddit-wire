@@ -54,19 +54,15 @@ EPISODE_RE = re.compile(
     r"(?P<final> - Final)?\.mp3$"
 )
 
-# Chronological order within a single day. Morning episodes (the default
-# 6 AM cron) dedupe under "Daily" so both new "Reddit Wire - <date>" and
-# legacy "Reddit Daily - <date>" files live in the same slot.
-TOD_ORDER = {
-    "Daily": 0,       # morning default, 5-11
-    "Afternoon": 1,   # 12-16
-    "Evening": 2,     # 17-20
-    "Late Night": 3,  # 21-4
-}
-
 
 def parse_episode_date(date_str: str) -> datetime:
-    """Parse 'April 10, 2026' into a timezone-aware datetime (noon UTC)."""
+    """Parse 'April 10, 2026' into a timezone-aware datetime.
+
+    Used only as the dedup key for `(date, variant)` in `find_episodes`.
+    The actual RSS pubDate comes from the mp3 file's mtime so that multiple
+    episodes on the same calendar day (morning + late night, for example)
+    sort and display correctly in podcast apps.
+    """
     return datetime.strptime(date_str, "%B %d, %Y").replace(
         hour=12, tzinfo=timezone.utc
     )
@@ -142,15 +138,17 @@ def find_episodes() -> list[tuple[datetime, Path, Path | None, Path | None]]:
         if existing is None or (is_final and not existing[1]):
             by_key[key] = (p, is_final)
 
-    # Sort: date desc, then chronological-within-day desc (Late Night first,
-    # Morning last) so the feed reads newest-first end-to-end.
-    def sort_key(item: tuple[tuple[datetime, str], tuple[Path, bool]]):
-        (date, variant), _ = item
-        return (date, TOD_ORDER.get(variant, 0))
-
+    # Sort by the mp3 file's mtime (newest first). mtime is set by ffmpeg
+    # when it writes the Final mix, so it reflects the actual "episode
+    # produced at" moment. This makes "14h ago" / "2m ago" labels in podcast
+    # apps accurate and keeps multiple episodes on the same calendar day
+    # in their real chronological order (a 22:15 Late Night run sorts above
+    # the 06:00 Morning run on the same date, because its mtime is later).
     episodes: list[tuple[datetime, Path, Path | None, Path | None]] = []
     for (date, _variant), (mp3_path, _) in sorted(
-        by_key.items(), key=sort_key, reverse=True
+        by_key.items(),
+        key=lambda kv: kv[1][0].stat().st_mtime,
+        reverse=True,
     ):
         # Script file has no " - Final" suffix
         base = re.sub(r" - Final$", "", mp3_path.stem)
@@ -206,9 +204,13 @@ def build_feed() -> int:
     now = format_datetime(datetime.now(timezone.utc))
     items: list[str] = []
     for date, mp3_path, txt_path, desc_path in episodes:
-        filesize = mp3_path.stat().st_size
+        stat = mp3_path.stat()
+        filesize = stat.st_size
         duration = probe_duration_seconds(mp3_path)
-        pub_date = format_datetime(date)
+        # Use the file's mtime for pubDate so "X ago" timestamps are accurate
+        # and multiple episodes per day sort correctly in podcast apps.
+        pub_datetime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        pub_date = format_datetime(pub_datetime)
         # Build a clean display title: "Reddit Wire - <date>" for morning
         # episodes, "Reddit Wire - <date> (Afternoon|Evening|Late Night)" for
         # others. Normalizes legacy "Reddit Daily" / "Reddit Afternoon" files
