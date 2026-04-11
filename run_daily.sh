@@ -44,6 +44,9 @@ cp podcast_script.txt "output/${FILENAME}.txt"
 if [ -f podcast_description.txt ]; then
     cp podcast_description.txt "output/${FILENAME}.description.txt"
 fi
+if [ -f podcast_closing.txt ]; then
+    cp podcast_closing.txt "output/${FILENAME}.closing.txt"
+fi
 
 # 3. Generate Audio (Local Kokoro)
 if run_with_timeout 900 python3 generate_vo.py "${FILENAME}"; then

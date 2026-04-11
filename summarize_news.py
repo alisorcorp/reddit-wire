@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+from pathlib import Path
 from google import genai
 from dotenv import load_dotenv
 
@@ -8,6 +9,9 @@ MAX_POSTS = 30
 MAX_COMMENT_CHARS = 300
 MAX_CONTENT_CHARS = 1000
 MAX_COMMENTS_PER_POST = 5
+# How many recent closings to load as "don't repeat these" context.
+# Too few = weak variety pressure; too many = wasted tokens.
+RECENT_CLOSINGS_WINDOW = 7
 
 def trim_reddit_data(raw_json):
     """Trim reddit data to stay within reasonable token limits."""
@@ -32,6 +36,31 @@ def check_data_freshness(filepath):
     mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
     if mtime.date() != datetime.now().date():
         print(f"Warning: {filepath} is from {mtime.strftime('%Y-%m-%d')}, not today. Data may be stale.")
+
+
+def load_recent_closings(output_dir: Path, limit: int) -> list[str]:
+    """Return the most recent N episode closings, newest first.
+
+    Used to give Gemini explicit 'don't repeat any of these' context so the
+    daily closing genuinely varies instead of relying on Gemini's non-existent
+    memory of yesterday's output.
+    """
+    if not output_dir.exists():
+        return []
+    closing_files = sorted(
+        output_dir.glob("Reddit *.closing.txt"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    closings: list[str] = []
+    for p in closing_files[:limit]:
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            continue
+        if text:
+            closings.append(text)
+    return closings
 
 def summarize():
     load_dotenv()
@@ -67,19 +96,38 @@ def summarize():
     check_data_freshness('reddit_today.json')
     reddit_data = trim_reddit_data(raw_json)
 
+    # Load the last N closings so Gemini can actually vary the sign-off
+    # instead of being asked to "not repeat yesterday" without any memory of it.
+    recent_closings = load_recent_closings(Path("output"), RECENT_CLOSINGS_WINDOW)
+    if recent_closings:
+        recent_closings_block = (
+            "\n\n    RECENT CLOSINGS YOU'VE ALREADY USED (each one is from a previous episode — "
+            "do NOT repeat any of their ideas, framings, callbacks, metaphors, structures, or rhetorical moves; "
+            "the new closing must feel genuinely different from all of them):\n\n"
+            + "\n\n---\n\n".join(recent_closings)
+            + "\n\n---\n"
+        )
+    else:
+        recent_closings_block = ""
+
     prompt = f"""
     TODAY'S DATE: {today_str}
 
     Read the following Reddit data and podcast persona.
     Write a conversational 1200-1500 word podcast script in the style of Apple News Today,
-    followed by a short episode description for the podcast app.
+    followed by a short episode description for the podcast app and a clean copy of the
+    closing for archival.
 
     OUTPUT FORMAT (exactly):
-    1. The podcast script (1200-1500 words, TTS-optimized per rules below).
+    1. The podcast script (1200-1500 words, TTS-optimized per rules below). The script must
+       end with the creative closing described in the persona.
     2. On its own line, exactly this marker: ~~~EPISODE_DESCRIPTION~~~
     3. A 2-3 sentence episode description (plain prose, max ~400 characters) highlighting
        the top stories covered. The description is plain text for a podcast app UI — it is
        NOT read by TTS, so it does not need phonetic spellings or contractions.
+    4. On its own line, exactly this marker: ~~~EPISODE_CLOSING~~~
+    5. A verbatim copy of the closing passage from the end of the script (just the closing,
+       nothing before it). This archival copy is saved so future episodes can avoid repeating it.{recent_closings_block}
 
     SCRIPT RULES (apply to part 1 only):
     - This script is for a Text-to-Speech (TTS) engine. It will read EVERYTHING literally.
@@ -112,6 +160,8 @@ def summarize():
     """
 
     print(f"Generating podcast script via Gemini API (Model: {model_name})...")
+    if recent_closings:
+        print(f"  (providing {len(recent_closings)} recent closings as 'don't repeat' context)")
     try:
         response = client.models.generate_content(
             model=model_name,
@@ -119,14 +169,22 @@ def summarize():
         )
         raw_text = response.text
 
-        # Split script and description on the marker
-        marker = "~~~EPISODE_DESCRIPTION~~~"
-        if marker in raw_text:
-            script_part, description_part = raw_text.split(marker, 1)
+        # Parse the three-part response: script, description, closing.
+        desc_marker = "~~~EPISODE_DESCRIPTION~~~"
+        closing_marker = "~~~EPISODE_CLOSING~~~"
+
+        if desc_marker in raw_text:
+            script_part, rest = raw_text.split(desc_marker, 1)
         else:
-            print("Warning: description marker not found in response. Falling back to script-only.")
+            print("Warning: description marker not found. Falling back to script-only.")
             script_part = raw_text
-            description_part = ""
+            rest = ""
+
+        if closing_marker in rest:
+            description_part, closing_part = rest.split(closing_marker, 1)
+        else:
+            description_part = rest
+            closing_part = ""
 
         lines = script_part.split('\n')
         cleaned_lines = [
@@ -135,6 +193,7 @@ def summarize():
         ]
         final_script = '\n'.join(cleaned_lines).strip()
         final_description = description_part.strip()
+        final_closing = closing_part.strip()
 
         with open('podcast_script.txt', 'w') as f:
             f.write(final_script)
@@ -144,6 +203,11 @@ def summarize():
             with open('podcast_description.txt', 'w') as f:
                 f.write(final_description)
             print("Successfully generated podcast_description.txt")
+
+        if final_closing:
+            with open('podcast_closing.txt', 'w') as f:
+                f.write(final_closing)
+            print("Successfully generated podcast_closing.txt")
     except Exception as e:
         print(f"Error during generation: {e}")
 
