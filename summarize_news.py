@@ -1,9 +1,14 @@
 import os
 import json
+import re
+import urllib.request
 from datetime import datetime
 from pathlib import Path
-from google import genai
 from dotenv import load_dotenv
+
+# `google.genai` is imported lazily inside summarize() only when
+# LLM_BACKEND != "local", so users running 100% local inference don't need
+# the google-genai package installed at all.
 
 MAX_POSTS = 30
 MAX_COMMENT_CHARS = 300
@@ -36,6 +41,39 @@ def check_data_freshness(filepath):
     mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
     if mtime.date() != datetime.now().date():
         print(f"Warning: {filepath} is from {mtime.strftime('%Y-%m-%d')}, not today. Data may be stale.")
+
+
+def generate_via_local_llm(prompt: str) -> str:
+    """POST the prompt to a local llama-server OpenAI-compatible endpoint.
+
+    This is the default backend (LLM_BACKEND=local). Talks to a llama.cpp
+    `llama-server` — expected model is Gemma 4 26B-A4B-it (MoE, 4B active)
+    with reasoning enabled. Gemini remains available via LLM_BACKEND=gemini.
+    """
+    base_url = os.getenv("LLM_BASE_URL", "http://127.0.0.1:8081").rstrip("/")
+    model = os.getenv("LLM_LOCAL_MODEL", "local-model")
+    # max_tokens budget = reasoning/thinking trace + script (~2k tokens) +
+    # description + closing + markers. Reasoning traces on Gemma 4 are
+    # unpredictable (seen 1k-2.5k), so we give 8192 to leave comfortable
+    # headroom — truncating mid-script is a silent failure mode that
+    # breaks the downstream marker parser.
+    body = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_tokens": 8192,
+        "stream": False,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base_url}/v1/chat/completions",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=600) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+    return payload["choices"][0]["message"]["content"]
 
 
 def load_recent_closings(output_dir: Path, limit: int) -> list[str]:
@@ -96,11 +134,23 @@ def summarize():
     today_str = get_date_with_ordinal()
     current_hour, time_of_day = get_time_of_day()
 
-    if not api_key:
-        print("Error: GOOGLE_API_KEY not found in .env. Get one at https://aistudio.google.com/")
-        return
-
-    client = genai.Client(api_key=api_key)
+    backend = os.getenv("LLM_BACKEND", "local").lower()
+    client = None
+    if backend != "local":
+        # Lazy import so a 100%-local setup doesn't require google-genai.
+        try:
+            from google import genai
+        except ImportError:
+            print(
+                "Error: LLM_BACKEND=gemini but the google-genai package is not installed.\n"
+                "  Install it with:  pip install google-genai\n"
+                "  Or set LLM_BACKEND=local to use llama-server."
+            )
+            return
+        if not api_key:
+            print("Error: GOOGLE_API_KEY not found in .env. Get one at https://aistudio.google.com/")
+            return
+        client = genai.Client(api_key=api_key)
 
     try:
         with open('reddit_today.json', 'r') as f:
@@ -155,7 +205,7 @@ def summarize():
     - DO NOT include both the original spelling and the pronunciation. Choose one.
     - Use TODAY'S DATE ({today_str}) in your opening line. Do not use the example date from the persona.
     - Open with a warm, natural greeting that matches the CURRENT LOCAL TIME ({time_of_day}). Do NOT default to a morning greeting if it is not morning — pick wording that genuinely fits the current time of day. If it is late night, acknowledge the unusual hour with a greeting that sounds right for that time, not a recycled morning template.
-    - Write "AI" naturally. Do not spell it out or use phonetic alternatives.
+    - Write "AI" as "AI" — a single two-letter word. NEVER write it as "A-I", "A.I.", "A I", or any hyphenated/spaced/punctuated variant. The TTS engine reads "AI" as "ay-eye" correctly on its own; any hyphen or punctuation between the letters makes it read as letter-by-letter spelling ("A dash I"), which sounds wrong. Same rule applies to "CLI" — write it as "CLI", not "C-L-I" — or replace it with "command-line tool" if the context allows.
     - Always write "localLLaMA" as "Local-Lama".
     - For any model name containing a decimal, spell the decimal as "point" (e.g., "3.5" becomes "three-point-five", "4.1" becomes "four-point-one", "2.0" becomes "two-point-oh").
     - ALWAYS use contractions in place of formal phrasing (e.g., "it's" not "it is", "don't" not "do not", "we're" not "we are", "that's" not "that is"). The script should sound natural and spoken.
@@ -180,19 +230,33 @@ def summarize():
     {reddit_data}
     """
 
-    print(f"Generating podcast script via Gemini API (Model: {model_name})...")
+    if backend == "local":
+        local_model_label = os.getenv("LLM_LOCAL_MODEL", "llama-server")
+        print(f"Generating podcast script via local llama-server ({local_model_label})...")
+    else:
+        print(f"Generating podcast script via Gemini API (Model: {model_name})...")
     if recent_closings:
         print(f"  (providing {len(recent_closings)} recent closings as 'don't repeat' context)")
     try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt
-        )
-        raw_text = response.text
+        if backend == "local":
+            raw_text = generate_via_local_llm(prompt)
+        else:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            raw_text = response.text
 
         # Parse the three-part response: script, description, closing.
         desc_marker = "~~~EPISODE_DESCRIPTION~~~"
         closing_marker = "~~~EPISODE_CLOSING~~~"
+
+        # Some models (notably Gemma) rewrite the tilde markers as markdown
+        # emphasis (`***EPISODE_DESCRIPTION***`, `**EPISODE_CLOSING**`, etc.).
+        # Normalize any 2-4 `*` or `~` delimiter variant back to the canonical
+        # tilde form so the split below works regardless of backend quirks.
+        raw_text = re.sub(r"[*~]{2,4}\s*EPISODE_DESCRIPTION\s*[*~]{2,4}", desc_marker, raw_text)
+        raw_text = re.sub(r"[*~]{2,4}\s*EPISODE_CLOSING\s*[*~]{2,4}", closing_marker, raw_text)
 
         if desc_marker in raw_text:
             script_part, rest = raw_text.split(desc_marker, 1)

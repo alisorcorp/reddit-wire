@@ -15,6 +15,7 @@ voices/
 error.log
 output.log
 server.log
+llama-server.log
 .DS_Store
 
 # Core scripts are tracked (override *.sh)
